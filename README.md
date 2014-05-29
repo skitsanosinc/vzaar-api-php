@@ -15,8 +15,8 @@ In order to start using vzaar API library
 ```php
 require_once 'Vzaar.php';
 
-Vzaar::$token = 'u2nd3DVI71jQ7dTtz9mHA953XeIQeodmZvSE6AbTX8'; //
-Vzaar::$secret = 'skitsanos';
+Vzaar::$token = 'VZAAR_API_TOKEN'; //
+Vzaar::$secret = 'VZAAR_USERNAME';
 ```
 
 ####Third-party plugins not maintained by vzaar
