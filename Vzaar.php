@@ -463,19 +463,17 @@ class Vzaar
         return $apireply->_data[0]["vzaar-api"]["video"];
     }
 	
-	public static function uploadSubtitle($language, $videoId, $body)
-    {
-        $_url = Vzaar::URL_LIVE . "api/subtitle/upload.xml";
-
+	public static function generateThumbnail($videoId, $thumbTime)
+ {
+        $_url = Vzaar::URL_LIVE . "api/videos/".$videoId."/generate_thumb.xml";
         $req = Vzaar::setAuth($_url, 'POST');
-
+        if($thumbTime < 0 || is_integer($thumbTime)== false)
+            $thumbTime = 0;
         $data = '<?xml version="1.0" encoding="UTF-8"?>
                 <vzaar-api>
-                    <subtitle>
-                        <language>' . $language . '</language>
-                        <video_id>' . $videoId . '</video_id>
-                        <body>' . $body . '</body>
-                    </subtitle>
+                    <video>
+                        <thumb_time>' . $thumbTime . '</thumb_time>
+                    </video>
                 </vzaar-api>';
 
         $c = new HttpRequest($_url);
@@ -487,7 +485,13 @@ class Vzaar
         array_push($c->headers, 'Connection: close');
         array_push($c->headers, 'Content-Type: application/xml');
 
-        return $c->send($data);
+        $responseBody = $c->send($data);
+        if(strlen($responseBody)>0)
+        {
+            $apireply = new XMLToArray($responseBody);
+            return $apireply->_data[0]["vzaar-api"]["status"];
+        }
+        return null;
     }
     
     public static function uploadThumbnail($videoId, $path)
