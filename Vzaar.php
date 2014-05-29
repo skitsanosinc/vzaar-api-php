@@ -489,6 +489,32 @@ class Vzaar
 
         return $c->send($data);
     }
+    
+    public static function uploadThumbnail($videoId, $path)
+    {
+        $_url = Vzaar::URL_LIVE . "api/videos/".$videoId."/upload_thumb.json";
+        $req = Vzaar::setAuth($_url, 'POST');
+
+        $c = new HttpRequest($_url);
+        $c->verbose = Vzaar::$enableHttpVerbose;
+        $c->uploadMode = true;
+        $c->method = 'POST';
+
+        array_push($c->headers, $req->to_header());
+        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
+        array_push($c->headers, 'Enclosure-Type: multipart/form-data');
+
+        $data = array( 'vzaar-api[thumbnail]' => "@".$path.';filename= '.$path.'Content-Type: image/jpeg');
+
+        $responseBody = $c->send($data, $path);
+        if(strlen($responseBody)>0)
+        {
+            $result = json_decode($responseBody);
+            return $result->{'vzaar-api'}->{'status'};
+        }
+
+        return null;
+    }
 
     public static function setAuth($_url, $_method = 'GET')
     {
