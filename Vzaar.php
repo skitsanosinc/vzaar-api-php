@@ -355,21 +355,20 @@ class Vzaar
     {
         $_url = Vzaar::URL_LIVE . "api/videos/" . $id . ".xml";
 
-        $req = Vzaar::setAuth($_url, 'POST');
+        $req = Vzaar::setAuth($_url, 'PUT');
 
-        $data = '<?xml version="1.0" encoding="UTF-8"?><vzaar-api><_method>put</_method><video><title>' . $title . '</title><description>' . $description . '</description>';
-        if ($private != '') $data .= '<private>' . $private . '</private>';
-        if ($seoUrl != '') $data .= '<seo_url>' . $seoUrl . '</seo_url>';
+        $data = '<?xml version="1.0" encoding="UTF-8"?><vzaar-api><_method>post</_method><video><title>' . $title . '</title><description>' . $description . '</description>';
+        //if ($private != '') $data .= '<private>' . $private . '</private>';
+        //if ($seoUrl != '') $data .= '<seo_url>' . $seoUrl . '</seo_url>';
         $data .= '</video></vzaar-api>';
 
         $c = new HttpRequest($_url);
         $c->verbose = Vzaar::$enableHttpVerbose;
-        $c->method = 'POST';
-        array_push($c->headers, $req->to_header());
-        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
-        array_push($c->headers, 'Connection: close');
+        $c->method = 'PUT';
         array_push($c->headers, 'Content-Type: application/xml');
-
+        array_push($c->headers, $req->to_header());
+        array_push($c->headers, 'Content-length: ' . strlen($data));
+        array_push($c->headers, 'Expect:');
         return $c->send($data);
     }
 
@@ -461,63 +460,6 @@ class Vzaar
 
         $apireply = new XMLToArray($c->send($data));
         return $apireply->_data[0]["vzaar-api"]["video"];
-    }
-	
-	public static function generateThumbnail($videoId, $thumbTime)
- {
-        $_url = Vzaar::URL_LIVE . "api/videos/".$videoId."/generate_thumb.xml";
-        $req = Vzaar::setAuth($_url, 'POST');
-        if($thumbTime < 0 || is_integer($thumbTime)== false)
-            $thumbTime = 0;
-        $data = '<?xml version="1.0" encoding="UTF-8"?>
-                <vzaar-api>
-                    <video>
-                        <thumb_time>' . $thumbTime . '</thumb_time>
-                    </video>
-                </vzaar-api>';
-
-        $c = new HttpRequest($_url);
-        $c->verbose = Vzaar::$enableHttpVerbose;
-        $c->method = 'POST';
-
-        array_push($c->headers, $req->to_header());
-        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
-        array_push($c->headers, 'Connection: close');
-        array_push($c->headers, 'Content-Type: application/xml');
-
-        $responseBody = $c->send($data);
-        if(strlen($responseBody)>0)
-        {
-            $apireply = new XMLToArray($responseBody);
-            return $apireply->_data[0]["vzaar-api"]["status"];
-        }
-        return null;
-    }
-    
-    public static function uploadThumbnail($videoId, $path)
-    {
-        $_url = Vzaar::URL_LIVE . "api/videos/".$videoId."/upload_thumb.json";
-        $req = Vzaar::setAuth($_url, 'POST');
-
-        $c = new HttpRequest($_url);
-        $c->verbose = Vzaar::$enableHttpVerbose;
-        $c->uploadMode = true;
-        $c->method = 'POST';
-
-        array_push($c->headers, $req->to_header());
-        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
-        array_push($c->headers, 'Enclosure-Type: multipart/form-data');
-
-        $data = array( 'vzaar-api[thumbnail]' => "@".$path.';filename= '.$path.'Content-Type: image/jpeg');
-
-        $responseBody = $c->send($data, $path);
-        if(strlen($responseBody)>0)
-        {
-            $result = json_decode($responseBody);
-            return $result->{'vzaar-api'}->{'status'};
-        }
-
-        return null;
     }
 
     public static function setAuth($_url, $_method = 'GET')
