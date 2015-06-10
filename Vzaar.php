@@ -14,8 +14,7 @@ require_once 'UploadSignature.php';
 
 date_default_timezone_set('UTC');
 // Check for CURL
-if (!extension_loaded('curl') && !@dl(PHP_SHLIB_SUFFIX == 'so' ? 'curl.so' : 'php_curl.dll')
-) {
+if (!extension_loaded('curl')) {
     exit("\nERROR: CURL extension not loaded\n\n");
 }
 
@@ -57,13 +56,11 @@ Class VideoStatusDescriptions
 
 class Vzaar
 {
-    public static $url;
+    public static $url = 'https://vzaar.com/';
     public static $token = '';
     public static $secret = '';
     public static $enableFlashSupport = false;
     public static $enableHttpVerbose = false;
-
-    const URL_LIVE = "https://vzaar.com/";
 
     /**
      * @static
@@ -71,7 +68,7 @@ class Vzaar
      */
     public static function whoAmI()
     {
-        $_url = Vzaar::URL_LIVE . 'api/test/whoami.json';
+        $_url = self::$url . 'api/test/whoami.json';
 
         $req = Vzaar::setAuth($_url);
 
@@ -100,7 +97,7 @@ class Vzaar
      */
     public static function getAccountDetails($account)
     {
-        $_url = Vzaar::URL_LIVE;
+        $_url = self::$url;
 
         $c = new HttpRequest($_url . 'api/accounts/' . $account . '.json');
         $c->verbose = Vzaar::$enableHttpVerbose;
@@ -115,10 +112,7 @@ class Vzaar
      */
     public static function getUserDetails($account)
     {
-        $_url = Vzaar::URL_LIVE;
-
-        $r = new HttpRequest($_url . 'api/' . $account . '.xml');
-        print_r($r->send());
+        $_url = self::$url;
 
         $req = new HttpRequest($_url . 'api/' . $account . '.json');
         $req->verbose = Vzaar::$enableHttpVerbose;
@@ -140,7 +134,7 @@ class Vzaar
      */
     public static function getVideoList($username, $auth = false, $count = 20, $labels = '', $status = '')
     {
-        $_url = Vzaar::URL_LIVE . 'api/' . $username . '/videos.json?count=' . $count;
+        $_url = self::$url . 'api/' . $username . '/videos.json?count=' . $count;
         if ($labels != '') $_url .= "&labels=" . $labels;
 
         if ($status != '') $_url .= '&status=' . $status;
@@ -167,7 +161,7 @@ class Vzaar
      */
     public static function searchVideoList($username, $auth = false, $title = '', $labels = '', $count = 20, $page = 1, $sort = 'desc')
     {
-        $_url = Vzaar::URL_LIVE . 'api/' . $username . '/videos.json?count=' . $count . '&page=' . $page . '&sort=' . $sort;
+        $_url = self::$url . 'api/' . $username . '/videos.json?count=' . $count . '&page=' . $page . '&sort=' . $sort;
         if ($labels != '' || $labels != null) $_url .= "&labels=" . $labels;
 
         if ($title != '') $_url .= '&title=' . urlencode($title);
@@ -190,7 +184,7 @@ class Vzaar
      */
     public static function getVideoDetails($id, $auth = false)
     {
-        $_url = Vzaar::URL_LIVE . 'api/videos/' . $id . '.json';
+        $_url = self::$url . 'api/videos/' . $id . '.json';
 
         $req = new HttpRequest($_url);
         $req->verbose = Vzaar::$enableHttpVerbose;
@@ -220,7 +214,15 @@ class Vzaar
         array_push($c->headers, 'x-amz-acl: ' . $signature['vzaar-api']['acl']);
         array_push($c->headers, 'Enclosure-Type: multipart/form-data');
 
-        $s3Headers = array('AWSAccessKeyId' => $signature['vzaar-api']['accesskeyid'], 'Signature' => $signature['vzaar-api']['signature'], 'acl' => $signature['vzaar-api']['acl'], 'bucket' => $signature['vzaar-api']['bucket'], 'policy' => $signature['vzaar-api']['policy'], 'success_action_status' => 201, 'key' => $signature['vzaar-api']['key'], 'file' => "@" . $path);
+
+        if (function_exists('curl_file_create')) {
+            $file = curl_file_create($path, self::_detectMimeType($path));
+        } else {
+            $file = "@" . $path;
+        };
+
+        $s3Headers = array('AWSAccessKeyId' => $signature['vzaar-api']['accesskeyid'], 'Signature' => $signature['vzaar-api']['signature'], 'acl' => $signature['vzaar-api']['acl'], 'bucket' => $signature['vzaar-api']['bucket'], 'policy' => $signature['vzaar-api']['policy'], 'success_action_status' => 201, 'key' => $signature['vzaar-api']['key'], "file" => $file);
+
 
         $reply = $c->send($s3Headers, $path);
 
@@ -235,7 +237,7 @@ class Vzaar
      */
     public static function uploadSubtitle($language, $videoId, $body)
     {
-        $_url = Vzaar::URL_LIVE . "api/subtitle/upload.xml";
+        $_url = self::$url . "api/subtitle/upload.xml";
 
         $req = Vzaar::setAuth($_url, 'POST');
 
@@ -244,7 +246,7 @@ class Vzaar
                     <subtitle>
                         <language>' . $language . '</language>
                         <video_id>' . $videoId . '</video_id>
-                        <body>' . $body . '</body>
+                        <body>' . self::_sanitize_str($body) . '</body>
                     </subtitle>
                 </vzaar-api>';
 
@@ -258,6 +260,68 @@ class Vzaar
         array_push($c->headers, 'Content-Type: application/xml');
 
         return $c->send($data);
+    }
+
+    public static function generateThumbnail($videoId, $time)
+    {
+        $_url = self::$url . "api/videos/" . $videoId . "/generate_thumb.xml";
+        $req = Vzaar::setAuth($_url, 'POST');
+
+        $data = '<?xml version="1.0" encoding="UTF-8"?>
+                <vzaar-api>
+                    <video>
+                        <thumb_time>' . $time . '</thumb_time>
+                    </video>
+                </vzaar-api>';
+
+        $c = new HttpRequest($_url);
+        $c->verbose = Vzaar::$enableHttpVerbose;
+        $c->method = 'POST';
+
+        array_push($c->headers, $req->to_header());
+        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
+        array_push($c->headers, 'Connection: close');
+        array_push($c->headers, 'Content-Type: application/xml');
+
+        return $c->send($data);
+    }
+
+    /**
+     * Upload thumbnail for the specified video.
+     *
+     * @param int $videoId
+     * @param string $path
+     * @return boolean thumbnail upload status
+     */
+    public static function uploadThumbnail($videoId, $path)
+    {
+        $_url = self::$url . "api/videos/" . $videoId . "/upload_thumb.xml";
+
+        $req = Vzaar::setAuth($_url, 'POST');
+
+        if (function_exists('curl_file_create')) {
+            $data = array('vzaar-api[thumbnail]' => curl_file_create($path, self::_detectMimeType($path)));
+        } else {
+            $data = array('vzaar-api[thumbnail]' => "@" . $path . ";type=" . self::_detectMimeType($path));
+        }
+
+        $c = new HttpRequest($_url);
+        $c->verbose = Vzaar::$enableHttpVerbose;
+        $c->method = 'POST';
+
+        array_push($c->headers, $req->to_header());
+        array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
+        array_push($c->headers, 'Connection: close');
+        array_push($c->headers, 'Enclosure-Type: multipart/form-data');
+
+        $reply = $c->send($data, $path);
+
+        $xmlObj = new XMLToArray($reply);
+        $arr = $xmlObj->getArray();
+
+        $status = $arr['vzaar-api'] ? $arr['vzaar-api']['status'] : false;
+
+        return $status;
     }
 
     /**
@@ -276,7 +340,7 @@ class Vzaar
      */
     public static function uploadLink($url, $title = NULL, $description = NULL, $profile = Profile::Medium, $bitrate = 256, $width = 200, $replace_id = NULL, $transcoding = false)
     {
-        $_url = Vzaar::URL_LIVE . 'api/upload/link.xml';
+        $_url = self::$url . "api/upload/link.xml";
 
         $signature = Vzaar::getUploadSignature();
 
@@ -287,11 +351,11 @@ class Vzaar
                     <link_upload>
                         <key>' . $signature['vzaar-api']['key'] . '</key>
                         <guid>' . $signature['vzaar-api']['guid'] . '</guid>
-                        <url>' . $url . '</url>
+                        <url>' . urlencode($url) . '</url>
                         <encoding_params>
-                          <title>' . $title . '</title>
-                          <description>' . $description . '</description>
-                          <size_id>' . $size_id . '</size_id>
+                          <title>' . self::_sanitize_str($title) . '</title>
+                          <description>' . self::_sanitize_str($description) . '</description>
+                          <size_id>' . $profile . '</size_id>
                           <bitrate>' . $bitrate . '</bitrate>
                           <width>' . $width . '</width>
                           <replace_id>' . $replace_id . '</replace_id>
@@ -319,6 +383,8 @@ class Vzaar
         return $video_id;
     }
 
+
+
     /**
      * Get Upload Signature
      * @static
@@ -327,7 +393,7 @@ class Vzaar
      */
     public static function getUploadSignature($redirectUrl = null)
     {
-        $_url = Vzaar::URL_LIVE . "api/videos/signature";
+        $_url = self::$url . "api/videos/signature";
 
         if (Vzaar::$enableFlashSupport) {
             $_url .= '?flash_request=true';
@@ -360,7 +426,7 @@ class Vzaar
      */
     public static function getUploadSignatureAsXml($redirectUrl = null)
     {
-        $_url = Vzaar::URL_LIVE . "api/videos/signature";
+        $_url = self::$url . "api/videos/signature";
 
         if (Vzaar::$enableFlashSupport) {
             $_url .= '?flash_request=true';
@@ -393,15 +459,15 @@ class Vzaar
      */
     public static function deleteVideo($id)
     {
-        $_url = Vzaar::URL_LIVE . "api/videos/" . $id . ".json";
+        $_url = self::$url . "api/videos/" . $id . ".json";
 
-        $req = Vzaar::setAuth($_url, 'DELETE');
+        $req = Vzaar::setAuth($_url, 'POST');
 
         $data = '<?xml version="1.0" encoding="UTF-8"?><vzaar-api><_method>delete</_method></vzaar-api>';
 
         $c = new HttpRequest($_url);
         $c->verbose = Vzaar::$enableHttpVerbose;
-        $c->method = 'DELETE';
+        $c->method = 'POST';
         array_push($c->headers, $req->to_header());
         array_push($c->headers, 'User-Agent: Vzaar OAuth Client');
         array_push($c->headers, 'Connection: close');
@@ -412,11 +478,11 @@ class Vzaar
 
     public static function editVideo($id, $title, $description, $private = 'false', $seoUrl = '')
     {
-        $_url = Vzaar::URL_LIVE . "api/videos/" . $id . ".xml";
+        $_url = self::$url . "api/videos/" . $id . ".xml";
 
         $req = Vzaar::setAuth($_url, 'PUT');
 
-        $data = '<?xml version="1.0" encoding="UTF-8"?><vzaar-api><_method>post</_method><video><title>' . $title . '</title><description>' . $description . '</description>';
+        $data = '<?xml version="1.0" encoding="UTF-8"?><vzaar-api><_method>post</_method><video><title>' . self::_sanitize_str($title) . '</title><description>' . self::_sanitize_str($description) . '</description>';
         //if ($private != '') $data .= '<private>' . $private . '</private>';
         //if ($seoUrl != '') $data .= '<seo_url>' . $seoUrl . '</seo_url>';
         $data .= '</video></vzaar-api>';
@@ -447,7 +513,7 @@ class Vzaar
      */
     public static function processVideo($guid, $title, $description, $labels, $profile = Profile::Medium, $transcoding = false, $replace = '')
     {
-        $_url = Vzaar::URL_LIVE . "api/videos";
+        $_url = self::$url . "api/videos";
 
         if ($replace != '') $replace = '<replace_id>' . $replace . '</replace_id>';
 
@@ -456,9 +522,9 @@ class Vzaar
         $data = '<vzaar-api>
 		    <video>' . $replace . '
 			<guid>' . $guid . '</guid>
-		        <title>' . $title . '</title>
-		        <description>' . $description . '</description>
-		        <labels>' . $labels . '</labels>
+		        <title>' . self::_sanitize_str($title) . '</title>
+		        <description>' . self::_sanitize_str($description) . '</description>
+		        <labels>' . self::_sanitize_str($labels) . '</labels>
 	        	<profile>' . $profile . '</profile>';
         if ($transcoding) $data .= '<transcoding>true</transcoding>';
         $data .= '</video> </vzaar-api>';
@@ -489,7 +555,7 @@ class Vzaar
      */
     public static function processVideoCustomized($guid, $title, $description, $labels, $width = 200, $bitrate = 256, $transcoding = false, $replace = '')
     {
-        $_url = Vzaar::URL_LIVE . "api/videos";
+        $_url = self::$url . "api/videos";
 
         if ($replace != '') $replace = '<replace_id>' . $replace . '</replace_id>';
 
@@ -531,6 +597,34 @@ class Vzaar
         return $req;
     }
 
+    private static function _detectMimeType($fn) {
+        $mimetype = false;
+
+        if(function_exists('finfo_fopen')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mimetype = finfo_file($finfo, $fn);
+            finfo_close($finfo);
+        } elseif(function_exists('getimagesize')) {
+            $size = getimagesize($fn);
+            $mimetype = $size['mime'];
+        } elseif(function_exists('mime_content_type')) {
+            $mimetype = mime_content_type($fn);
+        }
+        return $mimetype;
+    }
+
+    private static function _sanitize_str($str) {
+        return strtr(
+            $str,
+            array(
+                "<" => "&lt;",
+                ">" => "&gt;",
+                '"' => "&quot;",
+                "'" => "&apos;",
+                "&" => "&amp;",
+            )
+        );
+    }
 }
 
 class XMLToArray
@@ -643,7 +737,6 @@ class XMLToArray
         elseif (is_array($add)) $update = $add;
         elseif ($add) $update .= $add;
     }
-
 }
 
 ?>
